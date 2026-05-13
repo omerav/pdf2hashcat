@@ -229,13 +229,15 @@ class PdfParser:
         return object_id
 
     def get_pdf_object(self, object_id):
-        output = object_id+b" obj" + \
-            self.encrypted.partition(b"\r"+object_id+b" obj")[2]
-        if(output == object_id+b" obj"):
-            output = object_id+b" obj" + \
-            self.encrypted.partition(b"\n"+object_id+b" obj")[2]
+        # Match "<id> obj" preceded by any whitespace (\r, \n, space, tab)
+        # — some PDFs pack objects compactly: "endobj 19 0 obj" on one line.
+        # Lookbehind for non-digit prevents matching "129 0 obj" as "9 0 obj".
+        pattern = rb'(?<![0-9])' + re.escape(object_id) + rb' obj'
+        match = re.search(pattern, self.encrypted)
+        if match is None:
+            return object_id + b" obj"
+        output = self.encrypted[match.start():]
         output = output.partition(b"endobj")[0] + b"endobj"
-        # print >> sys.stderr, output
         return output
 
     def get_trailer(self):

@@ -182,6 +182,49 @@ class TestPdfParser(unittest.TestCase):
         self._assert_parse_fails_with(parser, "FOPN_foweb")
 
     # =========================================================================
+    # Compact object layout tests (no newline before "<id> obj")
+    # =========================================================================
+
+    def _make_pdf_bytes(self, objects, trailer_id=b"<abcd> <efgh>",
+                        encrypt_ref=b"5 0"):
+        """Assemble minimal PDF bytes from a list of (object_id, body) tuples."""
+        body = b"%PDF-1.7\n"
+        for obj_id, obj_body in objects:
+            body += obj_id + b" obj\n" + obj_body + b"\nendobj "
+        body += b"\ntrailer<</Size " + str(len(objects)).encode() + \
+                b" /Root 1 0 R /ID [" + trailer_id + \
+                b"] /Encrypt " + encrypt_ref + b" R>>\n%%EOF"
+        return body
+
+    def test_compact_layout_encrypt_object(self):
+        """Encrypt object preceded by space (not \\r\\n) must still parse.
+
+        Regression for PDFs that pack 'endobj <next-id> obj' on one line.
+        """
+        enc_dict = b"<</V 2 /R 3 /Length 128 /P -3904 " \
+                   b"/Filter /Standard " \
+                   b"/U (" + b"x" * 32 + b") " \
+                   b"/O (" + b"y" * 32 + b")>>"
+        pdf_bytes = self._make_pdf_bytes(
+            [(b"1 0", b"<</Type /Catalog>>"),
+             (b"5 0", enc_dict)],
+        )
+        with patch("builtins.open", mock_open(read_data=pdf_bytes)):
+            parser = PdfParser("dummy.pdf")
+        self._assert_parse_succeeds(parser)
+
+    def test_get_pdf_object_does_not_match_digit_prefix(self):
+        """Looking up '9 0 obj' must not match '19 0 obj' or '129 0 obj'."""
+        pdf_bytes = b"%PDF-1.4\n" \
+                    b"19 0 obj\n<</Bogus true>>\nendobj\n" \
+                    b"9 0 obj\n<</Real true>>\nendobj\n"
+        with patch("builtins.open", mock_open(read_data=pdf_bytes)):
+            parser = PdfParser("dummy.pdf")
+        obj = parser.get_pdf_object(b"9 0")
+        self.assertIn(b"/Real true", obj)
+        self.assertNotIn(b"/Bogus", obj)
+
+    # =========================================================================
     # Add new test cases below
     # =========================================================================
     #
