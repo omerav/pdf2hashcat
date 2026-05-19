@@ -229,10 +229,12 @@ class PdfParser:
         return object_id
 
     def get_pdf_object(self, object_id):
-        # Match "<id> obj" preceded by any whitespace (\r, \n, space, tab)
-        # — some PDFs pack objects compactly: "endobj 19 0 obj" on one line.
-        # Lookbehind for non-digit prevents matching "129 0 obj" as "9 0 obj".
-        pattern = rb'(?<![0-9])' + re.escape(object_id) + rb' obj'
+        # Match "<id> obj" at a PDF token boundary — some PDFs pack objects
+        # compactly ("endobj 19 0 obj" on one line), so any PDF whitespace
+        # (\r, \n, space, tab) is a valid separator. Lookbehind for
+        # non-whitespace enforces the boundary and avoids partial matches
+        # like "129 0 obj" -> "9 0 obj" or stream bytes like "foo9 0 obj".
+        pattern = rb'(?<!\S)' + re.escape(object_id) + rb' obj'
         match = re.search(pattern, self.encrypted)
         if match is None:
             return object_id + b" obj"

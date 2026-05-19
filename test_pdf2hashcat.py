@@ -224,6 +224,22 @@ class TestPdfParser(unittest.TestCase):
         self.assertIn(b"/Real true", obj)
         self.assertNotIn(b"/Bogus", obj)
 
+    def test_get_pdf_object_does_not_match_non_whitespace_prefix(self):
+        """Looking up '9 0 obj' must not match 'foo9 0 obj' inside a stream.
+
+        Enforces the PDF token-boundary semantic: object headers are only
+        recognized when preceded by PDF whitespace (or start of input),
+        not just by any non-digit byte.
+        """
+        pdf_bytes = b"%PDF-1.4\n" \
+                    b"1 0 obj\n<</Length 12>>stream\nfoo9 0 obj\nendstream\nendobj\n" \
+                    b"9 0 obj\n<</Real true>>\nendobj\n"
+        with patch("builtins.open", mock_open(read_data=pdf_bytes)):
+            parser = PdfParser("dummy.pdf")
+        obj = parser.get_pdf_object(b"9 0")
+        self.assertIn(b"/Real true", obj)
+        self.assertNotIn(b"stream", obj)
+
     # =========================================================================
     # Add new test cases below
     # =========================================================================
